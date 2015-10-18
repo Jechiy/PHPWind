@@ -1,192 +1,228 @@
-<?php	require_once(dirname(__FILE__).'/include/config.inc.php');
+<?php
+require_once ('global.php');
+define('SCR', 'message');
+define('MS', 'ms_');
+define('MESSAGE', 'message');
+define('DS', DIRECTORY_SEPARATOR);
+S::gp(array('subtype','type', 'action'));
+(!$winduid && $type != 'ajax') && Showmsg ( 'not_login' );
+$USCR = 'msg_message';
 
+//导航
+$homenavigation = array();
+$navConfigService = L::loadClass('navconfig', 'site');
+$homenavigation = $navConfigService->userHomeNavigation(PW_NAV_TYPE_MAIN, 'o');
 
-//留言内容处理
-if(isset($action) and $action=='add')
-{
-	if(empty($nickname) or
-	   empty($content) or
-	   empty($validate))
-	{
-		header('location:message.php');
-		exit();
+if (!$type) {
+	if ($winddb['newpm'] > 0 && $_G['maxmsg']) {
+		$messageServer = L::loadClass('message', 'message');
+		list($messageNumber, $noticeNumber, $requestNumber, $groupsmsNumber) = $messageServer->getUserStatistics($winduid);
+		if ($messageNumber) {
+			$type = 'sms';
+		} elseif ($noticeNumber) {
+			$type = 'notice';
+		} elseif ($requestNumber) {
+			$type = 'request';
+		} elseif ($groupsmsNumber) {
+			$type = 'groupsms';
+		} else {
+			$type = 'sms';
+		}
+	} else {
+		$type = 'sms';
 	}
-	
-	
-	//检测数据正确性
-	if(strtolower($validate) != strtolower(GetCkVdValue()))
-	{
-		ResetVdValue();
-		ShowMsg('验证码不正确！','?c=login');
-		exit();
-	}
-	else
-	{
-		$r = $dosql->GetOne("SELECT Max(orderid) AS orderid FROM `#@__message`");
-		$orderid  = (empty($r['orderid']) ? 1 : ($r['orderid'] + 1));
-		$nickname = htmlspecialchars($nickname);
-		$contact  = htmlspecialchars($contact);
-		$content  = htmlspecialchars($content);
-		$posttime = GetMkTime(time());
-		$ip       = gethostbyname($_SERVER['REMOTE_ADDR']);
-	
-	
-		$sql = "INSERT INTO `#@__message` (siteid, nickname, contact, content, orderid, posttime, htop, rtop, checkinfo, ip) VALUES (1, '$nickname', '$contact', '$content', '$orderid', '$posttime', '', '', 'false', '$ip')";
-		if($dosql->ExecNoneQuery($sql))
-		{
-			ShowMsg('留言成功，感谢您的支持！','message.php');
-			exit();
+}
+
+list($perpage, $filePath) = array(20, 'actions' . DS . MESSAGE . DS . MS);
+$allowTypes = array(
+	'sms'		=> $filePath . 'sms' . '.php', //短消息
+	'post'		=> $filePath . 'post' . '.php',  //发消息
+	'notice'	=> $filePath . 'notice' . '.php', //通知
+	'chat'		=> $filePath . 'chat' . '.php',  //多人聊天
+	'groupsms'	=> $filePath . 'groupsms' . '.php', //群组消息
+	'history'	=> $filePath . 'history' . '.php',  //历史消息
+	'request'	=> $filePath . 'request' . '.php', //请求
+	'ajax'		=> $filePath . 'ajax' . '.php',  //ajax统一入口
+	'shield'	=> $filePath . 'shield' . '.php', //屏蔽设置
+	'clear'		=> $filePath . 'clear' . '.php',
+	'search'	=> $filePath . 'search' . '.php'
+); //消息清空
+
+if (!empty($subtype) && !in_array($subtype, array_keys($allowTypes)))
+	Showmsg('undefined_action');
+
+if (!in_array($type, array_keys($allowTypes)))
+	Showmsg('undefined_action');
+
+//校验token
+S::gp(array('action'));
+if(in_array($action, array('sms','friend', 'mark', 'del', 'postReply', 'overlook', 'post', 'agree', 'markgroup', 'shield',
+	'unshield','open','close','replay'))){
+	PostCheck(1,0,0,1);
+}
+
+$operateFile = R_P . $allowTypes[$type];
+
+if (file_exists($operateFile)) {
+	require_once(R_P.'require/functions.php');
+	require_once(R_P.'require/bbscode.php');
+	require_once R_P.'u/require/core.php';
+	require_once(R_P.'require/showimg.php');
+	require_once(R_P.'u/lib/space.class.php');
+	$messageServer = L::loadClass('message', 'message');
+	$baseUrl = "message.php";
+	require $operateFile;
+} else {
+	Showmsg('undefined_action');
+}
+
+/**
+ * @param unknown_type $template
+ * @return string
+ */
+function messageEot($template) {
+	return printEot(MESSAGE . DS . MS . $template);
+}
+
+/**
+ * @param unknown_type $output
+ */
+function ajaxExport($output) {
+	echo is_array($output) ? stripslashes(pwJsonEncode($output)) : $output;
+	ajax_footer();
+}
+
+/**
+ * 重置消息数
+ */
+function resetUserMsgCount($num){
+	global $winduid,$winddb;
+	$num = intval($num);
+	$userService = L::loadclass('UserService', 'user'); /* @var $userService PW_UserService */
+	$userService->update($winduid, array('newpm'=>$num));
+}
+
+/**
+ * 页面按时间分栏显示
+ * @param Array $allList
+ * @return multitype:number Array
+ */
+function getSubListInfo($allList) {
+	global $timestamp;
+	$tTimes = $yTimes = $mTimes = 0;
+	$today = PwStrtoTime(get_date($timestamp, 'Y-m-d'));
+	$yesterday = $today - 24 * 60 * 60;
+	foreach ((array) $allList as $key => $value) {
+		if ($value['modified_time'] >= $today) {
+			$tTimes++;
+		} elseif ($value['modified_time'] >= $yesterday && $value['modified_time'] < $today) {
+			$yTimes++;
+		} elseif ($value['modified_time'] < $yesterday) {
+			$mTimes++;
 		}
 	}
+	return array($today, $yesterday, $tTimes, $yTimes, $mTimes);
 }
 
-//验证码获取函数
-function GetCkVdValue()
-{
-	if(!isset($_SESSION)) session_start();
-	return isset($_SESSION['ckstr']) ? $_SESSION['ckstr'] : '';
+/**
+ * 按时间分栏显示前台模板输出
+ * @param Array $value
+ * @return string
+ */
+function getSubListHtml($value) {
+	global $today, $tTimes, $yesterday, $yTimes, $mTimes, $groups;
+	$result = '';
+	if ($value['modified_time'] >= $today && $tTimes) {
+		$result = "<tr class=\"tr2\"><td colspan=\"6\">今天<em>({$tTimes}条)</em></td></tr>";
+		$tTimes = 0;
+	} elseif ($value['modified_time'] >= $yesterday && $value['modified_time'] < $today && $yTimes) {
+		$result = "<tr class=\"tr2\"><td colspan=\"6\">昨天<em>({$yTimes}条)</em></td></tr>";
+		$yTimes = 0;
+	} elseif ($value['modified_time'] < $yesterday && $mTimes) {
+		$result = "<tr class=\"tr2\"><td colspan=\"6\">更早<em>({$mTimes}条)</em></td></tr>";
+		$mTimes = 0;
+	}
+	return $result;
 }
 
-
-//验证码重置函数
-function ResetVdValue()
-{
-	if(!isset($_SESSION)) session_start();
-	$_SESSION['ckstr'] = '';
+/**
+ * @param Array $value 结果集
+ * @return multitype:Array (图片 ，样式 ，提示信息)
+ */
+function getMessageIconByStatus($value) {
+	global $winduid;
+	$_b = $_img = $_tip = '';
+	if ($value['status'] == '1') {
+		$_img = $winduid == $value['create_uid'] ? 'sendun.png' : 'reun.png';
+		$_b = 'class="b"';
+		$_tip = '(未读)';
+	} elseif ($value['status'] == 2) {
+		$_img = $winduid == $value['create_uid'] ? 'sendun.png' : 'reun.png';
+		$_b = 'class="b"';
+		$_tip = '(未读)';
+	} else {
+		$_img = $winduid == $value['create_uid'] ? 'sendread.png' : 'reread.png';
+		$_b = '';
+		$_tip = '';
+	}
+	return array($_img, $_b, $_tip);
 }
+
+/**
+ * @param Array $message
+ * @return string
+ */
+function getAllUsersHtml($message, $type = ''){
+	global $windid;
+	$userList = (array)unserialize($message['extra']);
+	if (!in_array($message['create_username'],$userList)) {
+		$userList = array_merge(array($message['create_username']),$userList);
+	}
+	$userListHtml = "";
+	for ($i = 0 ; $i < count($userList); $i++) {
+		$_userName = $userList[$i] == $windid ? '我' : $userList[$i];
+		if ($i == 0) {
+			$userListHtml .= '<a href="u.php?username=' . urlencode($userList[$i]) . '">' . $_userName . '</a> 和 ';
+		} else {
+			$userListHtml .= '<a href="u.php?username=' . urlencode($userList[$i]) . '">' . $_userName . '</a>, ';
+		}
+	}
+	$userListHtml = trim($userListHtml, ', ');
+	return $userListHtml;
+}
+
+/**
+ * @return string
+ */
+function getUnReadHtml(){
+	global $notReadCount,$action;
+	$html = "";
+	if ($action == 'unread') {
+		$html = "<tr class=\"tr2\"><td colspan=\"6\">未读消息<em>({$notReadCount}条)</em></td></tr>";
+	}
+	return $html;
+}
+
+/**
+ * 取得请求操作返回的状态,只争对消息的状态
+ * @param $typeid int 消息类别
+ * @param $status int 消息状态
+ * @param $check  int 是否是审核操作
+ * @param $L	  string 语言包
+ * @return string 返回请求处理状态
+ */
+function getRequestTypeDes($typeid,$status = 0,$check = 0,$L = 'message') {
+	global $messageServer;
+	$typeDes = array(
+					 $messageServer->getConst('request_friend') => array('descript'=>getLangInfo($L,'request_friend'),0=>getLangInfo($L,'friend_request_agree'),4=>getLangInfo($L,'friend_add_ignore'),5=>getLangInfo($L,'friend_add_success')),
+					 $messageServer->getConst('request_group') => array('descript'=>getLangInfo($L,'request_group'),
+					 													 0=>getLangInfo($L,$tip = $check ? 'colony_check_agree' : 'colony_request_agree'),
+					 													 4=>getLangInfo($L,$tip = $check ? 'colony_check_ignore' : 'colony_add_ignore'),
+					 													 5=>getLangInfo($L,$tip = $check ? 'colony_check_success' : 'colony_joinsuccess')
+					 											  ),
+					 $messageServer->getConst('request_app') => array('descript'=>getLangInfo($L,'request_app'),0=>getLangInfo($L,'app_request_agree'),4=>getLangInfo($L,'app_add_ignore'),5=>getLangInfo($L,'app_add_success'))
+			   );
+	return $status ?  $typeDes[$typeid][$status] : $typeDes[$typeid];
+}
+
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<?php echo GetHeader(1,0,0,'客户留言'); ?>
-<link href="templates/default/style/webstyle.css" type="text/css" rel="stylesheet" />
-<script type="text/javascript" src="templates/default/js/jquery.min.js"></script>
-<script type="text/javascript" src="templates/default/js/top.js"></script>
-<script type="text/javascript">
-function cfm_msg()
-{
-	if($("#contact").val() == "")
-	{
-		alert("请填写联系方式！");
-		$("#contact").focus();
-		return false;
-	}
-	if($("#content").val() == "")
-	{
-		alert("请填写留言内容！");
-		$("#content").focus();
-		return false;
-	}
-	if($("#validate").val() == "")
-	{
-		alert("请填写验证码！");
-		$("#validate").focus();
-		return false;
-	}
-	$("#form").submit();
-}
-
-$(function(){
-	$("#contact").focus(function(){
-		$("#contact").attr("class", "msg_input_on"); 
-	}).blur(function(){
-		$("#contact").attr("class", "msg_input"); 
-	});
-
-	$("#content").focus(function(){
-		$("#content").attr("class", "msg_input_on"); 
-	}).blur(function(){
-		$("#content").attr("class", "msg_input"); 
-	});
-	
-	$("#validate").focus(function(){
-		$("#validate").attr("class", "msg_input_on"); 
-	}).blur(function(){
-		$("#validate").attr("class", "msg_input"); 
-	});
-
-	$("#contact").focus();
-});
-</script>
-</head>
-<body>
-<!-- header-->
-<?php require_once('header.php'); ?>
-<!-- /header-->
-<!-- banner-->
-<div class="subBanner"> <img src="templates/default/images/banner-ir.png" /> </div>
-<!-- /banner-->
-<!-- notice-->
-<div class="subnotice"><strong>网站公告：</strong><?php echo Info(1); ?> </div>
-<!-- /notice-->
-<!-- mainbody-->
-<div class="subBody">
-	<div class="subTitle"> <span class="catname">客户留言</span> <span>您当前所在位置：<a href="<?php echo $cfg_webpath; ?>">首页</a> &gt; <a href="message.php">客户留言</a></span>
-		<div class="cl"></div>
-	</div>
-	<div class="OneOfTwo">
-		<div class="subCont">
-			
-			<form name="form" id="form" method="post" action="">
-				<span class="msgtitle">联系方式：</span><input name="contact" type="text" id="contact" class="msg_input" /><div class="hr_10"></div><div class="hr_10"></div>
-				<span class="msgtitle">内　　容：</span><textarea name="content" class="msg_input" style="width:729px;height:180px;overflow:auto;" id="content" ></textarea><div class="hr_10"></div><div class="hr_10"></div>
-                <span class="msgtitle">验证码：</span><input name="validate" type="text" id="validate" class="msg_input" style="width:120px;margin-right:5px;" /> <span><img id="ckstr" src="data/captcha/ckstr.php" title="看不清？点击更换" align="absmiddle" style="cursor:pointer;" onClick="this.src=this.src+'?'" /> <a href="javascript:;" onClick="var v=document.getElementById('ckstr');v.src=v.src+'?';return false;">看不清?</a></span><br /><div class="hr_10"></div><div class="hr_10"></div>
-				<div class="msg_btn_area"> <a href="javascript:void(0);" onclick="cfm_msg();return false;">提　交</a></div>
-				<input type="hidden" name="action" id="action" value="add" />
-				<?php
-				if(!empty($_COOKIE['username']))
-					$nickname = AuthCode($_COOKIE['username']);
-				else
-					$nickname = '游客';
-				?>
-				<input type="hidden" name="nickname" id="nickname" value="<?php echo $nickname; ?>" />
-			</form>
-		
-			<?php
-			$dopage->GetPage("SELECT * FROM `#@__message` WHERE checkinfo=true ORDER BY `htop` DESC, `orderid` DESC",10);
-			$i = $dosql->GetTotalRow();
-			while($row = $dosql->GetArray())
-			{
-			?>
-			<div class="message_block">
-				<div class="message_title">
-					<h2><?php echo $row['nickname']; ?></h2>
-					<span><?php echo $i; ?>#</span></div>
-				<p><?php
-				echo $row['content'];
-				if($row['htop']) {
-					echo '<span class="msgflag">[置顶]</span>';
-				}
-				if($row['rtop']) {
-					echo '<span class="msgflag">[推荐]</span>';
-				}
-				?></p>
-				<?php
-				if($row['recont'] != '')
-				{
-				?>
-				<div class="message_replay"><strong>回复：</strong><?php echo $row['recont']; ?></div>
-				<?php
-				}
-				?>
-				<div class="message_info"><?php echo GetDateTime($row['posttime']); ?> / <?php echo preg_replace('/((?:\d+\.){3})\d+/', '\\1*', $row['ip']); ?></div>
-			</div>
-			<?php
-				$i--;
-			}
-			echo $dopage->GetList();
-			?>
-		</div>
-	</div>
-	<div class="TwoOfTwo">
-		<?php require_once('lefter.php'); ?>
-	</div>
-	<div class="cl"></div>
-</div>
-<!-- /mainbody-->
-<!-- footer-->
-<?php require_once('footer.php'); ?>
-<!-- /footer-->
-</body>
-</html>

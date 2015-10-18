@@ -1,112 +1,94 @@
-<?php require_once(dirname(__FILE__).'/inc/config.inc.php');IsModelPriv('member'); ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<title>会员管理</title>
-<link href="templates/style/admin.css" rel="stylesheet" type="text/css" />
-<script type="text/javascript" src="templates/js/jquery.min.js"></script>
-<script type="text/javascript" src="templates/js/forms.func.js"></script>
-</head>
-<body>
-<div class="topToolbar"> <span class="title">会员管理</span> <a href="javascript:location.reload();" class="reload">刷新</a></div>
-<form name="form" id="form" method="post" action="member_save.php">
-	<table width="100%" border="0" cellpadding="0" cellspacing="0" class="dataTable">
-		<tr align="left" class="head">
-			<td width="5%" height="36" class="firstCol"><input type="checkbox" name="checkid" id="checkid" onclick="CheckAll(this.checked);"></td>
-			<td width="5%">ID</td>
-			<td width="10%">头像</td>
-			<td width="15%">用户名</td>
-			<td width="15%">用户组</td>
-			<td width="15%">登录时间</td>
-			<td width="15%">经验值</td>
-			<td width="10%">积分</td>
-			<td width="10%" class="endCol">操作</td>
-		</tr>
-		<?php
-		$dopage->GetPage("SELECT * FROM `#@__member`");
-
-		while($row = $dosql->GetArray())
-		{
-			$usergroup = '';
-			$dosql->Execute("SELECT * FROM `#@__usergroup`",$row['id']);
-			while($row2 = $dosql->GetArray($row['id']))
-			{
-				if($row['expval'] >= $row2['expvala'] and
-				   $row['expval'] <= $row2['expvalb'])
-				{
-					$usergroup = '<span style="color:'.$row2['color'].'">'.$row2['groupname'].'</span>';
-				}
+<?php
+!function_exists('adminmsg') && exit('Forbidden');
+$basename = "$admin_file?adminjob=member";
+S::GP('step');
+if ($step != 2){
+	require_once (R_P . 'require/credit.php');
+	$sellset = $enhideset = $signcurtype = '';
+	foreach ($credit->cType as $key => $value) {
+		//post
+		$sellcked = in_array($key, $db_sellset['type']) ? 'CHECKED' : '';
+		$sellset .= '<li><input type="checkbox" name="sellset[type][]" value="' . $key . '" ' . $sellcked . ' /> ' . $value . '</li>';
+		$enhidechked = in_array($key, $db_enhideset['type']) ? 'CHECKED' : '';
+		$enhideset .= '<li><input type="checkbox" name="enhideset[type][]" value="' . $key . '" ' . $enhidechked . ' /> ' . $value . '</li>';
+		//face
+		if (!is_numeric($key)) {
+			if ($db_signcurtype == $key) {
+				$signcurtype .= '<option value="' . $key . '" SELECTED>' . $value . '</option>';
+			} else {
+				$signcurtype .= '<option value="' . $key . '">' . $value . '</option>';
 			}
-
-			if($usergroup == '')
-			{
-				//系统不允许使用子查询
-				$r = $dosql->GetOne("SELECT MAX(expvalb) as expvalb FROM `#@__usergroup`");
-				
-				if(isset($r['expvalb']) && ($row['expval'] > $r['expvalb']))
-				{
-					$r = $dosql->GetOne("SELECT `groupname` FROM `#@__usergroup` WHERE expvalb=".$r['expvalb']);
-					$usergroup = $r['groupname'];
-				}
-				else
-				{
-					$usergroup = '参数获取失败';
-				}
-			}
-			
-			$oauthico = '';
-
-			if($row['qqid'] != '')
-				$oauthico .= '<span class="qqico" title="QQ账号绑定"></span>';
-
-			if($row['weiboid'] != '')
-				$oauthico .= '<span class="weiboico" title="微博账号绑定"></span>';
-		?>
-		<tr align="left" class="dataTr">
-			<td height="60" class="firstCol"><input type="checkbox" name="checkid[]" id="checkid[]" value="<?php echo $row['id']; ?>" /></td>
-			<td><?php echo $row['id']; ?></td>
-			<td><span class="thumbs" style="width:48px;"><img src="../data/avatar/index.php?uid=<?php echo $row['id']; ?>&size=small&rnd=<?php echo GetRandStr(); ?>" width="48" height="48" /></span></td>
-			<td><?php echo $oauthico.$row['username']; ?></td>
-			<td><?php
-			echo $usergroup;
-			if($row['enteruser'] == 1) echo '<br /><span class="red">认证用户</span>';
-			?></td>
-			<td class="number"><?php echo GetDateMk($row['logintime']); ?><br />
-				<?php echo MyDate('H:i:s',$row['logintime']); ?></td>
-			<td><?php echo $row['expval']; ?></td>
-			<td><?php echo $row['integral']; ?></td>
-			<td class="action endCol"><span><a href="member_update.php?id=<?php echo $row['id']; ?>">修改</a></span> | <span class="nb"><a href="member_save.php?action=del2&id=<?php echo $row['id']; ?>" onclick="return ConfDel(0)">删除</a></span></td>
-		</tr>
-		<?php
 		}
-		?>
-	</table>
-</form>
-<?php
+	}
+	//post
+	$db_postmax = (int) $db_postmax;
+	$db_postmin = (int) $db_postmin;
+	$db_selcount = (int) $db_selcount;
+	$db_titlemax = (int) $db_titlemax;
+	$db_showreplynum = (int) $db_showreplynum;
+	$db_windpost['price'] = (int) $db_windpost['price'];
+	$db_windpost['income'] = (int) $db_windpost['income'];
+	ifcheck($db_postedittime, 'postedittime');
+	ifcheck($db_selectgroup, 'selectgroup');
+	ifcheck($db_windpost['checkurl'], 'windpost_checkurl');
+	//face
+	list($db_upload, $db_imglen, $db_imgwidth, $db_imgsize) = explode("\t", $db_upload);
+//	list($db_fthumbwidth, $db_fthumbheight) = explode("\t", $db_fthumbsize);
+	$maxuploadsize = @ini_get('upload_max_filesize');
+	$signgroup = '';
+	$num = 0;
+	foreach ($ltitle as $key => $value) {
+		if ($key != 1 && $key != 2) {
+			$num++;
+			$htm_tr = $num % 3 == 0 ? '' : '';
+			$signcked = strpos($db_signgroup, ",$key,") !== false ? 'CHECKED' : '';
+			$signgroup .= '<li><input type="checkbox" name="signgroup[]" value="' . $key . '" ' . $signcked . '> ' . $value . '</li>' . $htm_tr;
+		}
+	}
+	$signgroup && $signgroup = '<ul class="list_A list_120">' . $signgroup . '</ul>';
+	for ($i = 0; $i < 3; $i++) {
+		${'logintype_' . $i} = ($db_logintype & pow(2, $i)) ? 'CHECKED' : '';
+	}
 
-//判断无记录样式
-if($dosql->GetTotalRow() == 0)
-{
-	echo '<div class="dataEmpty">暂时没有相关的记录</div>';
-}
-?>
-<div class="bottomToolbar"><span class="selArea"><span>选择：</span> <a href="javascript:CheckAll(true);">全部</a> - <a href="javascript:CheckAll(false);">无</a> - <a href="javascript:DelAllNone('member_save.php');" onclick="return ConfDelAll(0);">删除</a></span> <a href="member_add.php" class="dataBtn">注册新会员</a> </div>
-<div class="page"> <?php echo $dopage->GetList(); ?> </div>
-<?php
+	$db_imglen = $db_imglen > 120 ? 120 : (int) $db_imglen;
+	$db_imgsize = (int) $db_imgsize;
+	$db_imgwidth = $db_imgwidth > 120 ? 120 : (int) $db_imgwidth;
+	$db_signmoney = (int) $db_signmoney;
+	$db_signheight = (int) $db_signheight;
+	//$db_fthumbwidth = (int) $db_fthumbwidth;
+	//$db_fthumbheight = (int) $db_fthumbheight;
+	$db_windpic['size'] = (int) $db_windpic['size'];
+	$db_windpic['picwidth'] = (int) $db_windpic['picwidth'];
+	$db_windpic['picheight'] = (int) $db_windpic['picheight'];
 
-//判断是否启用快捷工具栏
-if($cfg_quicktool == 'Y')
-{
-?>
-<div class="quickToolbar">
-	<div class="qiuckWarp">
-		<div class="quickArea"><span class="selArea"><span>选择：</span> <a href="javascript:CheckAll(true);">全部</a> - <a href="javascript:CheckAll(false);">无</a> - <a href="javascript:DelAllNone('member_save.php');" onclick="return ConfDelAll(0);">删除</a></span> <a href="member_add.php" class="dataBtn">注册新会员</a> <span class="pageSmall"> <?php echo $dopage->GetList(); ?> </span></div>
-		<div class="quickAreaBg"></div>
-	</div>
-</div>
-<?php
+	ifcheck($db_upload, 'upload');
+//	ifcheck($db_iffthumb, 'iffthumb');
+	ifcheck($db_signwindcode, 'signwindcode');
+	ifcheck($db_windpic['pic'], 'windpic_pic');
+	ifcheck($db_windpic['flash'], 'windpic_flash');
+	
+	include PrintEot('member');exit;
+} else {
+	S::gp(array('sellset', 'enhideset','config'), 'P');
+	S::gp(array('windpost', 'upload', 'signgroup', 'logintype', 'windpic'), 'P', 2);
+	$config['windpost'] = is_array($db_windpost) ? $db_windpost : array();
+	//post
+	$config['sellset'] = is_array($sellset) ? $sellset : array();
+	$config['windpic'] = is_array($windpic) ? $windpic : array();
+	is_array($windpost) && $config['windpost'] = array_merge($config['windpost'],$windpost);
+	$config['enhideset'] = is_array($enhideset) ? $enhideset : array();
+	$config['titlemax'] = (int) $config['titlemax'];
+	$config['postmax'] = (int) $config['postmax'];
+	$config['postmax'] < 1 && $config['postmax'] = 50000;
+	$config['postmin'] = (int) $config['postmin'];
+	//face
+	$upload['imglen'] = $upload['imglen'] > 120 ? 120 : $upload['imglen'];
+	$upload['imgsize'] < 1 && $upload['imgsize'] = 20;
+	$upload['imgwidth'] = $upload['imgwidth'] > 120 ? 120 : $upload['imgwidth'];
+	$config['logintype'] = intval(array_sum($logintype));
+	$config['signgroup'] = $signgroup ? ',' . implode(',', $signgroup) . ',' : '';
+	//$config['fthumbsize'] = $fthumbsize['fthumbwidth'] . "\t" . $fthumbsize['fthumbheight'];
+	$config['upload'] = $upload['upload'] . "\t" . $upload['imglen'] . "\t" . $upload['imgwidth'] . "\t" . $upload['imgsize'];
+	saveConfig();
+	adminmsg('operate_success');
 }
-?>
-</body>
-</html>

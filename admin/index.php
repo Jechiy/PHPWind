@@ -1,14 +1,11 @@
-<?php	require_once(dirname(__FILE__).'/inc/config.inc.php');
+<?php
+!function_exists('adminmsg') && exit('Forbidden');
 
-/*
-**************************
-(C)2010-2015 phpMyWind.com
-update: 2014-5-30 16:48:33
-person: Feng
-**************************
-*/
-
-header('location:default.php');
-exit();
+//多种后台布局风格
+//if ($_window) {
+	require_once (R_P.'admin/windowindex.php'); //豪华桌面版
+//} else {
+//	require_once (R_P.'admin/simpleindex.php'); //简洁文本版
+//}
 
 ?>
